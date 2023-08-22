@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -62,13 +63,8 @@ func restoreMapFromCSV(filename string) (map[uint64]string, error) {
 	return data, nil
 }
 
-func main() {
-	if len(os.Args[1:]) == 0 {
-		fmt.Printf("\tUsage: %s 88,82,182,211,197,144\n", os.Args[0])
-		os.Exit(1)
-	}
-	uidBytes := os.Args[1]
-	parts := strings.Split(uidBytes, ",")
+func getHashKey(text string) uint64 {
+	parts := strings.Split(text, ",")
 
 	var numValues []uint8
 	for _, numStr := range parts {
@@ -81,8 +77,12 @@ func main() {
 	numValues = append(numValues, 0)
 	numValues = append(numValues, 0)
 
-	hashKey := binary.LittleEndian.Uint64([]byte(numValues))
+	return binary.LittleEndian.Uint64([]byte(numValues))
+}
 
+func main() {
+
+	fmt.Printf("[...] Loading table from CSV, please wait\n")
 	found, err := restoreMapFromCSV("found.csv")
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -91,11 +91,35 @@ func main() {
 	}
 	importedCount := len(found)
 
-	fmt.Printf("[...] Looking up binding phrase for %s\n", uidBytes)
 	fmt.Printf("[...] Loaded %d entries from CSV\n", importedCount)
-	if val, ok := found[hashKey]; ok {
-		fmt.Printf("[+++] Found binding phrase for %s: %s\n", uidBytes, val)
-		os.Exit(0)
+
+	uidBytes := ""
+	if len(os.Args[1:]) > 0 {
+		uidBytes = os.Args[1]
+		fmt.Printf("[...] Looking up binding phrase for %s\n", uidBytes)
 	}
-	fmt.Printf("[---] Unable to find binding phrase for %s\n", uidBytes)
+
+	// Continuous mode
+	if uidBytes == "" {
+		scanner := bufio.NewScanner(os.Stdin)
+		fmt.Printf("Enter binding phrase: ")
+		for scanner.Scan() {
+			uidBytes = scanner.Text()
+			hashKey := getHashKey(uidBytes)
+			if val, ok := found[hashKey]; ok {
+				fmt.Printf("[+++] Found binding phrase for %s: %s\n", uidBytes, val)
+			} else {
+				fmt.Printf("[---] Unable to find binding phrase for %s\n", uidBytes)
+			}
+			fmt.Printf("Enter binding phrase: ")
+		}
+	// One-shot
+	} else {
+		hashKey := getHashKey(uidBytes)
+		if val, ok := found[hashKey]; ok {
+			fmt.Printf("[+++] Found binding phrase for %s: %s\n", uidBytes, val)
+			os.Exit(0)
+		}
+		fmt.Printf("[---] Unable to find binding phrase for %s\n", uidBytes)
+	}
 }
